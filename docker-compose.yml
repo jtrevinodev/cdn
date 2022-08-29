@@ -1,0 +1,110 @@
+#docker-compose up -d --build
+
+version: '3'
+services:
+
+  db:
+    image: postgres:14.1-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=cdn_metadata
+    ports:
+      - '5432:5432'
+    volumes: 
+      - db:/var/lib/postgresql/data
+      #- ./db/init.sql:/docker-entrypoint-initdb.d/create_tables.sql
+
+
+  dist:
+    image: "cdn-dist-img"
+    build: dist/
+    ports:
+      - "8000:80"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/cdn_metadata
+    
+
+  node1:
+    image: "cdn-node-img"
+    build: node/
+    ports:
+      - "8001:80"
+    volumes:
+      #- /storage
+      - nodestorage1:/storage
+        
+    environment:
+      # SET max storage
+      MAX_STORAGE: 100M
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/cdn_metadata
+
+  
+  node2:
+    image: "cdn-node-img"
+    build: node/
+    ports:
+      - "8002:80"
+      #- "8001-8003:80"
+    volumes:
+      - nodestorage2:/storage
+    
+    environment:
+      # SET max storage
+      MAX_STORAGE: 100M
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/cdn_metadata
+    
+
+  node3:
+    image: "cdn-node-img"
+    build: node/
+    ports:
+      - "8003:80"
+      #- "8001-8003:80"
+    volumes:
+      - nodestorage3:/storage
+
+    environment:
+      # SET max storage
+      MAX_STORAGE: 100M
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/cdn_metadata
+    
+
+volumes:
+  db:
+    driver: local
+
+  nodestorage1:
+    
+  nodestorage2:
+  
+  nodestorage3:
+
+
+# volumes:
+#   nodestorage1:
+#     driver: local
+#     #driver_opts:
+#       #o: "size=100m" #,uid=1000"
+#       #device: tmpfs
+#       #type: btrfs #type: tmpfs
+    
+#   nodestorage2:
+#     #driver: local
+#     #driver_opts:
+#       o: "size=100m" #,uid=1000"
+#       #device: tmpfs
+#       #type: tmpfs
+  
+#   nodestorage3:
+#     #driver: local
+#     #driver_opts:
+#     #  o: "size=100m" #,uid=1000"
+#       #device: tmpfs
+#       #type: tmpfs
+
+#   mysql-data:
+#     driver: local
+  
+
