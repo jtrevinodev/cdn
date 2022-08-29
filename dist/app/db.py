@@ -18,7 +18,7 @@ class Content(ormar.Model):
         tablename = "content"
 
     id: int = ormar.Integer(primary_key=True)
-    filename: str = ormar.String(max_length=128, unique=True, nullable=False)
+    filename: str = ormar.String(max_length=128, nullable=False)
     size: int = ormar.Integer(default=0)
     uri: str = ormar.String(max_length=128, nullable=False)
     created_date: datetime.datetime = ormar.DateTime(timezone=True, default=datetime.datetime.now())

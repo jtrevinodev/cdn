@@ -25,6 +25,9 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/cdn_metadata
     
+    depends_on:
+      - db
+    
 
   node1:
     image: "cdn-node-img"
