@@ -2,18 +2,21 @@ from typing import Union
 
 from fastapi import FastAPI, File, UploadFile
 from fastapi.responses import FileResponse
-from app.db import database, Content
 
-import shutil, os
+import os
+import shutil
 import humanfriendly
 import requests
+import yaml
 
 app = FastAPI()
+config = yaml.safe_load(open('app/nodes.yml'))
+
+dist_URL = 'http://'+config['nodes']['dist']['host'] + ':' + str(config['nodes']['dist']['port'])
 
 storagePath = '/storage/'
 maxStorage = humanfriendly.parse_size(os.environ.get('MAX_STORAGE', '0M'))
 statsPath = '/sys/fs/cgroup/'
-
 
 @app.get("/")
 def read_root():
@@ -22,46 +25,69 @@ def read_root():
 
 @app.post("/store")
 async def store(uri: str, file: UploadFile = File(...)):
-    content = None
+    
     try:
         # Store content
         with open(os.path.join(storagePath, file.filename), 'wb') as f:
             shutil.copyfileobj(file.file, f)
         
         fs = await file.read()
-        content = await Content.objects.create(filename=file.filename, size=len(fs), uri=uri)
+        
+        #content = await Content.objects.create(filename=file.filename, size=len(fs), uri=uri)
+        
+        # Request to dist node to create metadata
+        params = {
+            'filename': file.filename,
+            'size': len(fs),
+            'uri':uri
+        }
+        url = dist_URL + '/content/new'
+        resp = requests.post(url=url, params=params)
+        content = resp.json()
+
+        if content['status'] == 'OK':
+            return {"id": content['id'], "message": f"Content successfully uploaded. ID: {content['id']}"}
+        else:
+            return content['message']
 
     except Exception as ex:
         return {"message": "There was an error uploading the content: "+str(ex)}
     finally:
-        file.file.close()
-        
-    return {"id": content.id, "message": f"Content successfully uploaded. ID: {content.id}"}
+        file.file.close()    
+    
 
 
 @app.get("/retrieve/{id}")
 async def retrieve(id: int):
-    content = await Content.objects.get_or_none(id=id)
+    #content = await Content.objects.get_or_none(id=id)
 
-    if content:
-        file_path = os.path.join(storagePath, content.filename)
-        return FileResponse(file_path, media_type='application/octet-stream', filename=content.filename)
+    url = dist_URL + '/content/'+str(id)
+    resp = requests.get(url=url)
+    content = resp.json()
+
+    if content['status'] == 'OK':
+        file_path = os.path.join(storagePath, content['filename'])
+        return FileResponse(file_path, media_type='application/octet-stream', filename=content['filename'])
     
+
     return {"message": 'Could not find requested content.'}
 
 
 @app.put("/update")
 async def update(id: int, uri: str, file: UploadFile = File(...)):
-    content = await Content.objects.get_or_none(id=id)
+    #content = await Content.objects.get_or_none(id=id)
+    url = dist_URL + '/content/'+str(id)
+    resp = requests.get(url=url)
+    content = resp.json()
 
-    if content:
+    if content['status'] == 'OK':
         try:
             
             #file_path = os.path.join(storagePath, content.filename) 
             #os.remove(file_path)
 
             # Remove old content
-            request_url = content.uri + '/delete/'+str(content.id)
+            request_url = content['uri'] + '/delete/'+str(content['id'])
             params = {'metadata': 0} # Delete only the content
             resp = requests.delete(url=request_url, params=params)
             respj = resp.json()
@@ -74,11 +100,26 @@ async def update(id: int, uri: str, file: UploadFile = File(...)):
                 fs = await file.read()
 
                 # Update content metadata
-                content.filename = file.filename
-                content.size = len(fs)
-                content.uri = uri
+                #content.filename = file.filename
+                #content.size = len(fs)
+                #content.uri = uri
 
-                await content.update()
+                #await content.update()
+
+                url = dist_URL + '/content/'+str(id)
+                params = {
+                    'filename': file.filename, 
+                    'size': len(fs),
+                    'uri': uri
+                }
+                resp = requests.put(url=url, params=params)
+                content = resp.json()
+
+                if content['status'] == 'OK':
+                    return {"id": content['id'], "message": f"Content successfully updated. ID: {content['id']}"}
+                else:
+                    return {"status": "ERROR", "message": "Could not update content metadata."}
+                
             else:
                 return {"message": 'Could not delete old content.'}
 
@@ -89,19 +130,29 @@ async def update(id: int, uri: str, file: UploadFile = File(...)):
     else:
         return {"message": 'Could not find requested content.'}
         
-    return {"id": content.id, "message": f"Content successfully updated. ID: {content.id}"}
+    
 
 
 @app.delete("/delete/{id}")
 async def delete(id: int, metadata: int = 1):
-    content = await Content.objects.get_or_none(id=id)
-    if content:
+    #content = await Content.objects.get_or_none(id=id)
+    url = dist_URL + '/content/'+str(id)
+    resp = requests.get(url=url)
+    content = resp.json()
+
+    if content['status'] == 'OK':
         # Remove content from disk
-        file_path = os.path.join(storagePath, content.filename) 
+        file_path = os.path.join(storagePath, content['filename']) 
         os.remove(file_path)
 
         if metadata == 1:
-            await content.delete()
+            #await content.delete()
+            url = dist_URL + '/content/'+str(content['id'])
+            resp = requests.delete(url=url)
+            content = resp.json()
+
+            if not content['status'] == 'OK':
+                return {"status":"ERROR", "message": 'Could not delete content metadata.'}
         
         return {"status":"OK","message": 'Content deteled successfully.'}
     
@@ -137,15 +188,3 @@ def storage_size():
     
     return size
 
-
-
-@app.on_event("startup")
-async def startup():
-    if not database.is_connected:
-        await database.connect()
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    if database.is_connected:
-        await database.disconnect()

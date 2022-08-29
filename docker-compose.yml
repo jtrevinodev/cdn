@@ -38,7 +38,6 @@ services:
     environment:
       # SET max storage
       MAX_STORAGE: 100M
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/cdn_metadata
 
   
   node2:
@@ -53,7 +52,6 @@ services:
     environment:
       # SET max storage
       MAX_STORAGE: 100M
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/cdn_metadata
     
 
   node3:
@@ -68,7 +66,6 @@ services:
     environment:
       # SET max storage
       MAX_STORAGE: 100M
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/cdn_metadata
     
 
 volumes:

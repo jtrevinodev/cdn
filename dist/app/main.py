@@ -49,6 +49,85 @@ async def locate(id: int):
         return {"message": "Could not locate requested content."}
 
 
+#############################################################
+# METADATA MODULE
+#############################################################
+
+# Create metadata
+@app.post("/content/new")
+async def content_new(
+    filename: str,
+    size: int,
+    uri: str
+):
+    content = await Content.objects.create(filename=filename, size=size, uri=uri)
+    if not content:
+        return {"status": "ERROR", "message": "Error creating content metadata."}
+    
+    content_json = content.dict()
+    content_json['status'] = 'OK'
+
+    return content_json
+
+# Get metadata
+@app.get("/content/{id}")
+async def content_get(
+    id: int
+):
+    content = await Content.objects.get_or_none(id=id)
+    
+    if not content:
+        return {"status": "ERROR", "message": "Could not find content."}
+    
+    content_json = content.dict()
+    content_json['status'] = 'OK'
+
+    return content_json
+
+# Update metadata
+@app.put("/content/{id}")
+async def content_update(
+    id: int,
+    filename: str,
+    size: int,
+    uri: str
+):
+    content = await Content.objects.get_or_none(id=id)
+    
+    if not content:
+        return {"status": "ERROR", "message": "Could not find content."}
+    
+    # Update
+    content.filename = filename
+    content.size = size
+    content.uri = uri
+    
+    await content.update()
+
+    content_json = content.dict()
+    content_json['status'] = 'OK'
+
+    return content_json
+
+# Get metadata
+@app.delete("/content/{id}")
+async def content_delete(
+    id: int
+):
+    content = await Content.objects.get_or_none(id=id)
+    
+    if not content:
+        return {"status": "ERROR", "message": "Could not find content."}
+    
+    await content.delete()
+
+    resp = {}
+    resp['status'] = 'OK'
+
+    return resp
+
+#############################################################
+
 @app.get("/nodes")
 def get_nodes():
     return {"nodes": config['nodes']}
@@ -64,18 +143,19 @@ def get_stats():
     endpoint = '/stats'
     stats = []
     
-    for _,node in config['nodes'].items():
-        # REQUEST NODE STATS
-        node_url = 'http://'+node['host']+':'+str(node['port'])
-        url = node_url + endpoint
-        
-        resp = requests.get(url=url)
-        print(resp.json())
-        
-        resp_json = resp.json()
-        resp_json['node'] = node_url
+    for name,node in config['nodes'].items():
+        if name != 'dist':
+            # REQUEST NODE STATS
+            node_url = 'http://'+node['host']+':'+str(node['port'])
+            url = node_url + endpoint
+            
+            resp = requests.get(url=url)
+            print(resp.json())
+            
+            resp_json = resp.json()
+            resp_json['node'] = node_url
 
-        stats.append(resp_json)
+            stats.append(resp_json)
     
     return stats
 
